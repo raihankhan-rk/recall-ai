@@ -5,7 +5,7 @@ from openai import OpenAI
 import uuid
 import requests
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -29,7 +29,7 @@ async def extract_text_from_image(image_file_path):
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "What's in this image? Extract all important text and give a short description of the image. In the response also mention that it was an image"},
+                    {"type": "text", "text": "What's in this image? Extract all important text and give a short description of the image."},
                     {
                         "type": "image_url",
                         "image_url": {
@@ -59,32 +59,31 @@ async def generate_embedding(text):
     return openai_client.embeddings.create(input=[text], model="text-embedding-3-small").data[0].embedding
 
 async def store_in_vector_db(embedding, text, username):
-    collection_name = f"{username}"
-    
-    # Check if collection exists, if not, create it
-    collections = qdrant_client.get_collections().collections
-    if collection_name not in [c.name for c in collections]:
-        qdrant_client.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(size=1536, distance=Distance.COSINE)
-        )
-    
+    collection_name = "user_data"
     qdrant_client.upsert(
         collection_name=collection_name,
         points=[
             {
                 "id": str(uuid.uuid4()),
                 "vector": embedding,
-                "payload": {"text": text}
+                "payload": {"text": text, "username": username}
             }
         ]
     )
 
 async def search_vector_db(query_embedding, username):
-    collection_name = username
+    collection_name = "user_data"
     search_result = qdrant_client.search(
         collection_name=collection_name,
         query_vector=query_embedding,
+        query_filter=Filter(
+            must=[
+                FieldCondition(
+                    key="username",
+                    match=MatchValue(value=username)
+                )
+            ]
+        ),
         limit=5
     )
     return [hit.payload['text'] for hit in search_result]
