@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import speech_recognition as sr
 from pydub import AudioSegment
 from io import BytesIO
-from utils import extract_text_from_image, summarize_text
+from utils import extract_text_from_image, summarize_text, generate_embedding, store_in_vector_db, search_vector_db
 
 async def process_document(doc):
     file = await doc.get_file()
@@ -33,26 +33,32 @@ async def process_pdf(file_obj):
         return await process_scanned_pdf(file_obj)
     
     summary = await summarize_text(text)
-    return summary
+    embedding = await generate_embedding(summary)
+    await store_in_vector_db(embedding, summary)
+    return "PDF processed and stored"
 
 async def process_scanned_pdf(file_obj):
     # Use OCR or GPT-4 Vision here
     text = await extract_text_from_image(file_obj)
     summary = await summarize_text(text)
-    return summary
+    embedding = await generate_embedding(summary)
+    await store_in_vector_db(embedding, summary)
+    return "Scanned PDF processed and stored"
 
 async def process_docx(file_obj):
     doc = docx.Document(file_obj)
     text = "\n".join([para.text for para in doc.paragraphs])
     summary = await summarize_text(text)
-    return summary
+    embedding = await generate_embedding(summary)
+    await store_in_vector_db(embedding, summary)
+    return "DOCX processed and stored"
 
 async def process_photo(photo):
     file = await photo.get_file()
-    file_content = await file.download_as_bytearray()
-    text = await extract_text_from_image(BytesIO(file_content))
-    summary = await summarize_text(text)
-    return summary
+    summary = await extract_text_from_image(file.file_path)
+    embedding = await generate_embedding(summary)
+    await store_in_vector_db(embedding, summary)
+    return f"Photo analyzed and stored: {summary}"
 
 async def process_audio(audio):
     file = await audio.get_file()
@@ -66,20 +72,28 @@ async def process_audio(audio):
         text = recognizer.recognize_google(audio_data)
     
     summary = await summarize_text(text)
-    return summary
+    embedding = await generate_embedding(summary)
+    await store_in_vector_db(embedding, summary)
+    return "Audio transcribed and stored"
 
 async def process_text(text):
+    if text.lower().startswith(("what", "how", "why", "when", "where", "who")):
+        return f"Query: {text}"
+    embedding = await generate_embedding(text)
+    await store_in_vector_db(embedding, text)
     return text
 
 async def process_url(url):
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
     text = soup.get_text()
+    print(text)
     summary = await summarize_text(text)
-    return summary
+    embedding = await generate_embedding(f"A link was provided ({url}) and here's the summary of what's in that link:\n{summary}")
+    await store_in_vector_db(embedding, summary)
+    return "URL content extracted and stored"
 
 async def query_knowledge_base(query):
-    # This function should be implemented to search your vector database
-    # and return relevant information based on the query
-    # For now, we'll just return a placeholder response
-    return f"Here's what I found related to your query: '{query}'"
+    embedding = await generate_embedding(query)
+    results = await search_vector_db(embedding)
+    return f"Here's what I found: {results}"
