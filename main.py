@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from handlers import start, help_command, handle_document, handle_photo, handle_audio, handle_text
+from handlers import start, help_command, handle_document, handle_photo, handle_audio, handle_text, handle_ask
 from utils import setup_logging
 
 load_dotenv()
@@ -16,10 +16,11 @@ def main() -> None:
     # Command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("ask", handle_ask))
 
     # Message handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    # application.add_handler(MessageHandler(filters.DOCUMENT, handle_document))
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.AUDIO, handle_audio))
 

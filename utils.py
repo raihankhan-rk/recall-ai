@@ -24,7 +24,7 @@ def setup_logging():
 
 async def extract_text_from_image(image_file_path):
     response = openai_client.chat.completions.create(
-        model="gpt-4-vision-preview",
+        model="gpt-4o-mini",
         messages=[
             {
                 "role": "user",
@@ -45,7 +45,7 @@ async def extract_text_from_image(image_file_path):
 
 async def summarize_text(text):
     response = openai_client.chat.completions.create(
-        model="gpt-4-turbo-preview",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are a helpful assistant that summarizes text. Include all key points and make it concise."},
             {"role": "user", "content": f"Summarize the following text:\n\n{text}"}
@@ -58,9 +58,19 @@ async def generate_embedding(text):
     text = text.replace("\n", " ")
     return openai_client.embeddings.create(input=[text], model="text-embedding-3-small").data[0].embedding
 
-async def store_in_vector_db(embedding, text):
+async def store_in_vector_db(embedding, text, username):
+    collection_name = f"{username}"
+    
+    # Check if collection exists, if not, create it
+    collections = qdrant_client.get_collections().collections
+    if collection_name not in [c.name for c in collections]:
+        qdrant_client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=1536, distance=Distance.COSINE)
+        )
+    
     qdrant_client.upsert(
-        collection_name="knowledge_base",
+        collection_name=collection_name,
         points=[
             {
                 "id": str(uuid.uuid4()),
@@ -70,20 +80,21 @@ async def store_in_vector_db(embedding, text):
         ]
     )
 
-async def search_vector_db(query_embedding):
+async def search_vector_db(query_embedding, username):
+    collection_name = username
     search_result = qdrant_client.search(
-        collection_name="knowledge_base",
+        collection_name=collection_name,
         query_vector=query_embedding,
         limit=5
     )
     return [hit.payload['text'] for hit in search_result]
 
-async def query_knowledge_base(query):
+async def query_knowledge_base(query, username):
     # Generate embedding for the query
     query_embedding = await generate_embedding(query)
     
     # Search the vector database
-    search_results = await search_vector_db(query_embedding)
+    search_results = await search_vector_db(query_embedding, username)
     
     # Prepare the context for the LLM
     context = "\n\n".join(search_results)
@@ -92,7 +103,7 @@ async def query_knowledge_base(query):
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant that provides accurate answers based on the given context. If the answer is not in the context, say you don't remember any such thing."},
+            {"role": "system", "content": "You are a helpful assistant that provides accurate answers based on the given context. If the answer is not in the context, say you don't have that information."},
             {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}\n\nProvide a concise and accurate answer based on the context provided:"}
         ],
         max_tokens=150
