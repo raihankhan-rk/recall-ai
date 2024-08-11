@@ -71,20 +71,31 @@ async def process_photo(photo, username):
     return f"Photo analyzed and stored: {summary}"
 
 async def process_audio(audio, username):
-    file = await audio.get_file()
-    file_content = await file.download_as_bytearray()
-    audio_segment = AudioSegment.from_file(BytesIO(file_content))
-    audio_segment.export("temp.wav", format="wav")
-    
-    recognizer = sr.Recognizer()
-    with sr.AudioFile("temp.wav") as source:
-        audio_data = recognizer.record(source)
-        text = recognizer.recognize_google(audio_data)
-    
-    summary = await summarize_text(text)
-    embedding = await generate_embedding(summary)
-    await store_in_vector_db(embedding, summary)
-    return "Audio transcribed and stored"
+    try:
+        file = await audio.get_file()
+        file_content = await file.download_as_bytearray()
+        
+        # Convert MP3 to WAV
+        audio_segment = AudioSegment.from_mp3(BytesIO(file_content))
+        wav_io = BytesIO()
+        audio_segment.export(wav_io, format="wav")
+        wav_io.seek(0)
+        
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(wav_io) as source:
+            audio_data = recognizer.record(source)
+            text = recognizer.recognize_google(audio_data)
+        
+        summary = await summarize_text(text)
+        embedding = await generate_embedding(summary)
+        await store_in_vector_db(embedding, summary, username)
+        return f"Audio transcribed and stored. Transcription: {text}"
+    except sr.UnknownValueError:
+        return "Speech Recognition could not understand the audio"
+    except sr.RequestError as e:
+        return f"Could not request results from Speech Recognition service; {e}"
+    except Exception as e:
+        return f"Error processing audio: {str(e)}"
 
 async def process_text(text, username):
     if text.lower().startswith(("what", "how", "why", "when", "where", "who")):

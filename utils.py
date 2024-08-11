@@ -47,10 +47,10 @@ async def summarize_text(text):
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant that summarizes text. Include all key points and make it concise."},
-            {"role": "user", "content": f"Summarize the following text:\n\n{text}"}
+            {"role": "system", "content": "You are a helpful assistant that summarizes text. Include all necessary details and make it concise."},
+            {"role": "user", "content": f"Summarize the following text in short:\n\n{text}"}
         ],
-        max_tokens=150
+        # max_tokens=200
     )
     return response.choices[0].message.content
 
