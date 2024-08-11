@@ -1,55 +1,75 @@
-import sqlite3
+import mysql.connector
+from mysql.connector import Error
+from dotenv import load_dotenv
+from urllib.parse import urlparse
 import os
-import secrets
 
-DB_NAME = "user_licenses.db"
+load_dotenv()
 
-def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (user_id INTEGER PRIMARY KEY, license_key TEXT, is_active INTEGER)''')
-    conn.commit()
-    conn.close()
-
+# Database connection
 def get_db_connection():
-    return sqlite3.connect(DB_NAME)
+    try:
+        url = urlparse(os.getenv("DATABASE_URL"))
+        return mysql.connector.connect(
+            host=url.hostname,
+            user=url.username,
+            password=url.password,
+            database=url.path[1:],
+            port=url.port,
+            autocommit=False  # This ensures we control transactions manually
+        )
+    except Error as e:
+        print(f"An error occurred: {e}")
+        return None
 
-# def generate_license_key():
-#     return secrets.token_hex(16)
+# Check if user is activated
+async def is_user_activated(user_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT is_activated FROM users WHERE user_id = %s", (user_id,))
+    result = cur.fetchone()
+    cur.close()
+    conn.close()
+    return result and result[0]
 
-# def create_new_license():
-#     license_key = generate_license_key()
-#     conn = get_db_connection()
-#     c = conn.cursor()
-#     c.execute("INSERT INTO users (license_key, is_active) VALUES (?, 0)", (license_key,))
-#     conn.commit()
-#     conn.close()
-#     return license_key
+# Activate user with license key
+async def activate_user(user_id, license_key):
+    conn = get_db_connection()
+    if not conn:
+        return False, "Database connection error"
+    
+    try:
+        cur = conn.cursor()
+        
+        # Check if license key is valid and unused
+        cur.execute("SELECT is_used FROM license_keys WHERE `key` = %s", (license_key,))
+        key_status = cur.fetchone()
+        if not key_status or key_status[0]:
+            return False, "Invalid or already used license key."
 
-# def activate_user_license(user_id, license_key):
-#     conn = get_db_connection()
-#     c = conn.cursor()
-#     c.execute("SELECT * FROM users WHERE license_key = ? AND is_active = 0", (license_key,))
-#     if c.fetchone() is not None:
-#         c.execute("UPDATE users SET user_id = ?, is_active = 1 WHERE license_key = ?", (user_id, license_key))
-#         conn.commit()
-#         conn.close()
-#         return True
-#     conn.close()
-#     return False
+        # Start transaction
+        conn.start_transaction()
 
-# def get_user_license_status(user_id):
-#     conn = get_db_connection()
-#     c = conn.cursor()
-#     c.execute("SELECT is_active FROM users WHERE user_id = ?", (user_id,))
-#     result = c.fetchone()
-#     conn.close()
-#     return result[0] if result else False
+        # Create or update user first
+        cur.execute(
+            "INSERT INTO users (user_id, is_activated, activated_at) VALUES (%s, TRUE, NOW()) "
+            "ON DUPLICATE KEY UPDATE is_activated = TRUE, activated_at = NOW()",
+            (user_id,)
+        )
 
-# def deactivate_user_license(user_id):
-#     conn = get_db_connection()
-#     c = conn.cursor()
-#     c.execute("UPDATE users SET is_active = 0 WHERE user_id = ?", (user_id,))
-#     conn.commit()
-#     conn.close()
+        # Now mark license key as used
+        cur.execute(
+            "UPDATE license_keys SET is_used = TRUE, used_by = %s, used_at = NOW() WHERE `key` = %s",
+            (user_id, license_key)
+        )
+
+        # Commit the transaction
+        conn.commit()
+        return True, "Successfully activated!"
+    except Error as e:
+        conn.rollback()
+        return False, f"Activation failed: {str(e)}"
+    finally:
+        if conn.is_connected():
+            cur.close()
+            conn.close()
