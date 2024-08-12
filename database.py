@@ -65,37 +65,3 @@ async def activate_user(user_id, username, license_key):
         return True, "Your account has been successfully activated!"
     except Exception as e:
         return False, f"Activation failed: {str(e)}"
-
-async def deactivate_user(username=None, license_key=None):
-    db = get_db_connection()
-    try:
-        query = {}
-        if username:
-            query["username"] = username
-        elif license_key:
-            query["license_key"] = license_key
-        else:
-            return False, "No identifier provided"
-
-        user = db.users.find_one(query)
-        if not user:
-            return False, "User not found"
-
-        # Deactivate user
-        result = db.users.update_one(
-            {"_id": user["_id"]},
-            {"$set": {"is_activated": False, "activated_at": None}}
-        )
-
-        if result.modified_count == 0:
-            return False, "User was not modified. They may already be deactivated."
-
-        # Reset license key
-        db.license_keys.update_one(
-            {"key": user["license_key"]},
-            {"$set": {"is_used": False, "used_by": None, "username": None, "used_at": None}}
-        )
-
-        return True, f"User {user['username']} has been deactivated"
-    except Exception as e:
-        return False, f"Deactivation failed: {str(e)}"
