@@ -85,9 +85,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     doc = update.message.document
     username = update.message.from_user.username
-    await update.message.reply_text("Processing your document. This might take a moment...")
-    result = await process_document(doc, username)
-    await update.message.reply_text(f"I'll remember the document: {result}")
+    print(f"User {username} sent a document: {doc.file_name}")
+    await process_document(doc, username)
+    await update.message.reply_text("Sure! Will remember that")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await is_user_activated(update.effective_user.id):
@@ -95,9 +95,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     photo = update.message.photo[-1]  # Get the largest photo
     username = update.message.from_user.username
-    await update.message.reply_text("Analyzing your image. One moment please...")
-    result = await process_photo(photo, username)
-    await update.message.reply_text(f"I'll remember the image: {result}")
+    print(f"User {username} sent a photo")
+    await process_photo(photo, username)
+    await update.message.reply_text("Sure! Will remember that")
 
 async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await is_user_activated(update.effective_user.id):
@@ -105,9 +105,9 @@ async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     audio = update.message.audio
     username = update.message.from_user.username
-    await update.message.reply_text("Transcribing your audio. This might take a while...")
-    result = await process_audio(audio, username)
-    await update.message.reply_text(f"I'll remember the audio: {result}")
+    print(f"User {username} sent an audio file: {audio.file_name}")
+    await process_audio(audio, username)
+    await update.message.reply_text("Sure! Will remember that")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await is_user_activated(update.effective_user.id):
@@ -115,13 +115,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     text = update.message.text
     username = update.message.from_user.username
+    print(f"User {username} sent a text message: {text}")
     if text.startswith(('http://', 'https://')):
-        await update.message.reply_text("Processing the URL. One moment...")
-        result = await process_url(text, username)
-        await update.message.reply_text(f"URL processed: {result}")
+        await process_url(text, username)
     else:
-        result = await process_text(text, username)
-        await update.message.reply_text(f"I've stored this information: {result}")
+        await process_text(text, username)
+    await update.message.reply_text("Sure! Will remember that")
 
 async def handle_ask(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await is_user_activated(update.effective_user.id):
@@ -132,5 +131,6 @@ async def handle_ask(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("Please provide a question after the /ask command.")
         return
     username = update.message.from_user.username
+    print(f"User {username} asked a question: {query}")
     result = await query_knowledge_base(query, username)
     await update.message.reply_text(result)
