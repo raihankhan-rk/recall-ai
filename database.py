@@ -1,55 +1,67 @@
-import sqlite3
+from pymongo import MongoClient
+from dotenv import load_dotenv
 import os
-import secrets
+from datetime import datetime
 
-DB_NAME = "user_licenses.db"
-
-def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (user_id INTEGER PRIMARY KEY, license_key TEXT, is_active INTEGER)''')
-    conn.commit()
-    conn.close()
+load_dotenv()
 
 def get_db_connection():
-    return sqlite3.connect(DB_NAME)
+    client = MongoClient(os.getenv("MONGODB_URI"))
+    return client[os.getenv("DB_NAME")]
 
-# def generate_license_key():
-#     return secrets.token_hex(16)
+async def is_user_activated(user_id=None, username=None):
+    db = get_db_connection()
+    query = {}
+    if user_id:
+        query["user_id"] = user_id
+    elif username:
+        query["username"] = username
+    else:
+        return False
+    user = db.users.find_one(query)
+    return user and user.get("is_activated", False)
 
-# def create_new_license():
-#     license_key = generate_license_key()
-#     conn = get_db_connection()
-#     c = conn.cursor()
-#     c.execute("INSERT INTO users (license_key, is_active) VALUES (?, 0)", (license_key,))
-#     conn.commit()
-#     conn.close()
-#     return license_key
+async def activate_user(user_id, username, license_key):
+    db = get_db_connection()
+    try:
+        # Check if license key is valid and unused
+        key_doc = db.license_keys.find_one({"key": license_key})
+        if not key_doc:
+            return False, "Invalid license key."
+        if key_doc.get("is_used", False):
+            # If the key is used by the same user, allow reactivation
+            if key_doc.get("used_by") == user_id:
+                db.users.update_one(
+                    {"user_id": user_id},
+                    {"$set": {
+                        "username": username,
+                        "is_activated": True,
+                        "activated_at": datetime.now(),
+                        "license_key": license_key
+                    }}
+                )
+                return True, "Your account has been reactivated!"
+            else:
+                return False, "This license key is already in use."
 
-# def activate_user_license(user_id, license_key):
-#     conn = get_db_connection()
-#     c = conn.cursor()
-#     c.execute("SELECT * FROM users WHERE license_key = ? AND is_active = 0", (license_key,))
-#     if c.fetchone() is not None:
-#         c.execute("UPDATE users SET user_id = ?, is_active = 1 WHERE license_key = ?", (user_id, license_key))
-#         conn.commit()
-#         conn.close()
-#         return True
-#     conn.close()
-#     return False
+        # Mark license key as used
+        db.license_keys.update_one(
+            {"key": license_key},
+            {"$set": {"is_used": True, "used_by": user_id, "username": username, "used_at": datetime.now()}}
+        )
 
-# def get_user_license_status(user_id):
-#     conn = get_db_connection()
-#     c = conn.cursor()
-#     c.execute("SELECT is_active FROM users WHERE user_id = ?", (user_id,))
-#     result = c.fetchone()
-#     conn.close()
-#     return result[0] if result else False
+        # Activate user
+        db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "username": username,
+                "is_activated": True,
+                "activated_at": datetime.now(),
+                "license_key": license_key
+            }},
+            upsert=True
+        )
 
-# def deactivate_user_license(user_id):
-#     conn = get_db_connection()
-#     c = conn.cursor()
-#     c.execute("UPDATE users SET is_active = 0 WHERE user_id = ?", (user_id,))
-#     conn.commit()
-#     conn.close()
+        return True, "Your account has been successfully activated!"
+    except Exception as e:
+        return False, f"Activation failed: {str(e)}"

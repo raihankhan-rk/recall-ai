@@ -1,8 +1,8 @@
 import os
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from handlers import start, help_command, handle_document, handle_photo, handle_audio, handle_text, handle_ask
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
+from handlers import start, help_command, handle_document, handle_photo, handle_audio, handle_text, handle_ask, activate_callback, activate_command, handle_license_key
 from utils import setup_logging
 
 load_dotenv()
@@ -12,11 +12,14 @@ logger = setup_logging()
 
 def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
-
+    
     # Command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("ask", handle_ask))
+    application.add_handler(CommandHandler("activate", activate_command))
+    application.add_handler(CallbackQueryHandler(activate_callback, pattern='^activate$'))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_license_key))
 
     # Message handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

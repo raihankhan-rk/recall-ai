@@ -102,8 +102,8 @@ async def query_knowledge_base(query, username):
     response = openai_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant that provides accurate answers based on the given context. If the answer is not in the context, say you don't have that information."},
-            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}\n\nProvide a concise and accurate answer based on the context provided:"}
+            {"role": "system", "content": "You are a powerful genius with extraordinary memory capabilities. You remember everything. You provide answers based on the memories. If the answer is not in the memory, say you don't have that information."},
+            {"role": "user", "content": f"Memory:\n{context}\n\nQuestion: {query}\n\nProvide a concise and accurate answer based on the memories provided:"}
         ],
         max_tokens=150
     )
